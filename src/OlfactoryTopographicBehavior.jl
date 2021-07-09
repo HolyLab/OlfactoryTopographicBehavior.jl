@@ -4,7 +4,7 @@ using DataFrames
 using IntervalSets
 using Unitful: Hz, s, uconvert
 
-export session_frame, trialdatas
+export is_lick, session_frame, trialdatas
 
 const TU = typeof(1.0s)
 const TI = typeof(1.0s .. 2.0s)
@@ -104,6 +104,19 @@ function trialdatas(df::DataFrame; fs=1000Hz, soundduration=1s, trialoffset=-1s,
     return alltrs
 end
 
+"""
+    is_lick(td::TrialData; deadline=4s)
+
+Return `true` if the animal licked. Only consider licks occurring after the beginning of the sound pulse and within `deadline` thereafter.
+"""
+function is_lick(td::TrialData; deadline=4s)
+    tstart = minimum(td.soundinterval)
+    firstidx = searchsortedfirst(td.lickonsets, tstart)
+    firstidx > lastindex(td.lickonsets) && return false
+    return td.lickonsets[firstidx] - tstart < deadline
+end
+
+## Utilities
 
 islo(trace, idx, lohi) = trace[idx] < lohi[1]
 ishi(trace, idx, lohi) = trace[idx] > lohi[2]

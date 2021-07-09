@@ -34,6 +34,18 @@ using Test
     mat = [df.soundlick df.lickometer df.odortiming df.odordirection]
     dfmat = session_frame(mat; soundlick=1, lickometer=2, odortiming=3, odordirection=4)
     @test dfmat == df
-    @test all(iszero, lick)
-    @test_throws ErrorException trialranges(df; lohi_sound = (0.25, 0.75), fs=2Hz, soundduration=3s)
+
+    # lick detection
+    td = OlfactoryTopographicBehavior.TrialData(1:0, 1s .. 2s, 1.5s .. 3.0s, -1, [0.8s])
+    @test !is_lick(td)
+    push!(td.lickonsets, 6s)
+    @test !is_lick(td)
+    @test  is_lick(td; deadline=10s)
+    empty!(td.lickonsets)
+    @test !is_lick(td)
+    push!(td.lickonsets, 1.2s)
+    @test  is_lick(td)
+    empty!(td.lickonsets)
+    push!(td.lickonsets, 0.8s, 1.2s)
+    @test  is_lick(td)
 end
