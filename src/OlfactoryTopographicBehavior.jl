@@ -1,29 +1,76 @@
 module OlfactoryTopographicBehavior
 
 using DataFrames
-using Unitful: Hz, s
+using IntervalSets
+using Unitful: Hz, s, uconvert
 
-export session_frame, trialranges
+export session_frame, trialdatas
 
-struct TrialRanges
+const TU = typeof(1.0s)
+const TI = typeof(1.0s .. 2.0s)
+
+struct TrialData
     trialrange::UnitRange{Int}
-    soundrange::UnitRange{Int}
-    lickranges::Vector{UnitRange{Int}}
+    soundinterval::TI
+    odorinterval::TI
+    odordirection::Int
+    lickonsets::Vector{TU}
 end
-TrialRanges(tr::AbstractUnitRange, sr::AbstractUnitRange) = TrialRanges(tr, sr, UnitRange{Int}[])
+TrialData(tr::AbstractUnitRange, si::AbstractInterval, oi::AbstractInterval, od) = TrialData(tr, si, oi, od, TU[])
 
+function Base.show(io::IO, td::TrialData)
+    println(io, "Trial over indices ", td.trialrange, ':')
+    println(io, "  sound: ", td.soundinterval)
+    println(io, "  odor delivery: ", td.odorinterval)
+    println(io, "  odor direction: ", td.odordirection)
+    print(io, "  lick times: ")
+    Base.show_delim_array(io, td.lickonsets, '[', ",", ']', false)  # skips printing of unit
+end
+
+"""
+    df = session_frame(ai; odortiming=1, vaccuum=2, soundlick=3, camera=4, sniff=5, lickometer=6, odordirection=7, lick=8)
+
+Construct a trial session DataFrame from an input matrix `ai`. The keyword arguments provide the column index for each signal.
+"""
 function session_frame(ai; odortiming=1, vaccuum=2, soundlick=3, camera=4, sniff=5, lickometer=6, odordirection=7, lick=8)
-    return DataFrame("odortiming" => view(ai, :, odortiming),
-                     "soundlick" => view(ai, :, soundlick),
-                     "sniff" => view(ai, :, sniff),
-                     "odordirection" => view(ai, :, odordirection),
-                     "lick" => view(ai, :, lick)
-                     )
+    df = DataFrame()
+    if soundlick ∈ axes(ai, 2)
+        df.soundlick = view(ai, :, soundlick)
+    end
+    if lickometer ∈ axes(ai, 2)
+        df.lickometer = view(ai, :, lickometer)
+    end
+    if odortiming ∈ axes(ai, 2)
+        df.odortiming = view(ai, :, odortiming)
+    end
+    if odordirection ∈ axes(ai, 2)
+        df.odordirection = view(ai, :, odordirection)
+    end
+    if sniff ∈ axes(ai, 2)
+        df.sniff = view(ai, :, sniff)
+    end
+    return df
 end
 
-function trialranges(df::DataFrame; fs=1000Hz, soundduration=1s, trialoffset=-1s, trialduration=10s, lohi_sound=(1, 3), lohi_lick=(0.25, 0.75), tprecision=0.1)
-    soundlick, lick = df.soundlick, df.lick
-    alltrs = TrialRanges[]
+"""
+    trialdatas(df::DataFrame; fs=1000Hz, soundduration=1s, trialoffset=-1s, trialduration=10s, lohi_sound=(1, 3), lohi_lick=(-0.2, -0.05), lohi_odor=(0.5, 3.0), tprecision=0.1)
+
+Collect data on all trials in `df`, which should be a DataFrame with colums "soundlick", "lickometer", "odortiming", and "odordirection".
+Each should be an analog signal with timing data.
+
+The keyword arguments allow you to set:
+- `fs`: the sampling frequency (affects conversion to physical units)
+- `soundduration`: the expected duration of the sound pulse. This is used to find trials
+- `tprecision`: fractional "slop" in timing permitted for identifying a sound pulse.
+- `trialoffset`: start of the trial relative to the sound pulse onset
+- `trialduration`: length of the trial
+- `lohi_sound`: voltage thresholds for sound lo and hi (a sound pulse starts when this goes hi)
+- `lohi_lick`: voltage thresholds for lick lo and hi (negative deflections correspond to licks)
+- `lohi_odor`: voltage threshold for odor timing (odor pulse starts when this goes hi)
+"""
+function trialdatas(df::DataFrame; fs=1000Hz, soundduration=1s, trialoffset=-1s, trialduration=10s, lohi_sound=(1, 3), lohi_lick=(-0.2, -0.05), lohi_odor=(0.5, 3.0), tprecision=0.1)
+    soundlick, lick, odortiming, dir = df.soundlick, df.lickometer, df.odortiming, df.odordirection
+    alltrs = TrialData[]
     i, n = 1, length(soundlick)
     i = advance_to_lo(soundlick, i, n, lohi_sound)
     while i < n
@@ -34,26 +81,29 @@ function trialranges(df::DataFrame; fs=1000Hz, soundduration=1s, trialoffset=-1s
         thi = (j-i)/fs   # duration, in time units, of the hi pulse
         if (1-tprecision)*soundduration <= thi <= (1+tprecision)*soundduration
             # We're in a sound marker. Initiate a trial.
-            sr = i:j-1
             tr = clamp(i + round(Int, float(trialoffset*fs)), 1, n) : clamp(i + round(Int, (trialduration + trialoffset) * float(fs)), 1, n)
-            trs = TrialRanges(tr, sr)
+            si = (i-first(tr))/fs .. (j-first(tr))/fs
+            iodor = advance_to_hi(odortiming, tr, lohi_odor)
+            jodor = advance_to_lo(odortiming, iodor, last(tr), lohi_odor)
+            oi = (iodor-first(tr))/fs .. (jodor-first(tr))/fs
+            trs = TrialData(tr, si, oi, dir[i])
             # Detect all licks in the trial
-            j = advance_to_lo(lick, tr, lohi_lick)
+            j = advance_to_hi(lick, tr, lohi_lick)   # lick signal is hi when not licking
             while j < last(tr)
-                j = advance_to_hi(lick, j, last(tr), lohi_lick)
+                j = advance_to_lo(lick, j, last(tr), lohi_lick)
                 j >= last(tr) && break
-                k = advance_to_lo(lick, j, last(tr), lohi_lick)
-                push!(trs.lickranges, j:k-1)
-                j = k
+                push!(trs.lickonsets, (j - first(tr))/fs)
+                j = advance_to_hi(lick, j, last(tr), lohi_lick)
             end
             push!(alltrs, trs)
             i = last(tr)
         else
-            error("soundlick pulse of duration $thi starting at $i not recognized")
+            error("soundlick pulse of duration $(uconvert(s, thi)) starting at $i not recognized")
         end
     end
     return alltrs
 end
+
 
 islo(trace, idx, lohi) = trace[idx] < lohi[1]
 ishi(trace, idx, lohi) = trace[idx] > lohi[2]
