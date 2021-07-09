@@ -3,11 +3,16 @@ uuid = "a8363329-a294-49e2-b96b-7376b181d66a"
 authors = ["Tim Holy <tim.holy@gmail.com> and contributors"]
 version = "0.1.0"
 
+[deps]
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+
 [compat]
 julia = "1"
 
 [extras]
+InvertedIndices = "41ab1584-1d38-5bbf-9106-f11c6c58b48f"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["InvertedIndices", "Test"]
