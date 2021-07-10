@@ -4,15 +4,18 @@ authors = ["Tim Holy <tim.holy@gmail.com> and contributors"]
 version = "0.1.0"
 
 [deps]
+DSP = "717857b8-e6f2-59f4-9121-6e50c889abd2"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [compat]
+DSP = "0.7"
 DataFrames = "1"
 IntervalSets = "0.5"
 Unitful = "1"
-julia = "1.4"
+julia = "1.6"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
