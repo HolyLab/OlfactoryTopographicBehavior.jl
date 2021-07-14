@@ -2,6 +2,7 @@ using OlfactoryTopographicBehavior
 using DataFrames
 using Unitful: Hz, s
 using IntervalSets
+using PyPlot: PyPlot, plt
 using Test
 
 @testset "OlfactoryTopographicBehavior.jl" begin
@@ -66,4 +67,17 @@ using Test
     @test agg["TN"] == [3]
     @test agg["FP"] == [4]
     @test agg["FN"] == [1]
+
+    # Plotting
+    dfplt = copy(df)
+    dfplt.sniff = randn(size(dfplt, 1))
+    dfrplt = OlfactoryTopographicBehavior.DataFrameRate(dfplt, fs)
+    tds = trialdatas(dfrplt; lohi_sound = (0.25, 0.75), soundduration=2s, fcarrierlick=1Hz, minlickduration=1s)
+    td = only(tds)
+    fig = plt.figure()
+    axsniff, axtiming = plottrial(dfrplt, td, fig)
+    show(io, axsniff)
+    str = String(take!(io))
+    @test occursin("AxesSubplot:xlabel='Time (s)', ylabel='Chest expansion", str)
+    plt.close(fig)
 end
