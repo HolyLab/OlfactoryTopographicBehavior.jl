@@ -13,6 +13,7 @@ export TrialData, collect_by_trialtype, is_lick, session_frame, trialdatas
 include("types.jl")
 include("utils.jl")
 include("api.jl")
+include("sniffs.jl")
 
 ## __init__
 

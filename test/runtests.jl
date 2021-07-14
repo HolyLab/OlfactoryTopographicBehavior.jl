@@ -80,4 +80,20 @@ using Test
     str = String(take!(io))
     @test occursin("AxesSubplot:xlabel='Time (s)', ylabel='Chest expansion", str)
     plt.close(fig)
+
+    # Sniff analysis
+    fill!(dfrplt.sniff, 0)
+    dfrplt.sniff[end÷2+1:end] .= 1
+    ss = OlfactoryTopographicBehavior.sniffslope(dfrplt, 0.5s)
+    @test all(<(0.01), ss[1:3])
+    @test all(<(0.01), ss[end-2:end])
+    val, idx = findmax(ss)
+    @test val > 0.3
+    @test idx ∈ (7, 8)
+    @test ss[7] ≈ ss[8]
+    time, freq, sgs = OlfactoryTopographicBehavior.sniffgrams(dfrplt, tds)
+    @test only(time) == 1s
+    @test freq == [0Hz, 0.5Hz, 1Hz]
+    @test only(sgs) == reshape([2, 0, 0], (3, 1))
+    @test OlfactoryTopographicBehavior.sniffgrams_power(freq, sgs; finterval=0.5Hz .. 1Hz) == [0]
 end
