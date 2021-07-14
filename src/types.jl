@@ -12,6 +12,13 @@ struct TrialData
 end
 TrialData(tr::AbstractUnitRange, si::AbstractInterval, ct::Quantity, oi::AbstractInterval, od) = TrialData(tr, si, ct, oi, od, TU[])
 
+Base.:(==)(td1::TrialData, td2::TrialData) = td1.trialrange == td2.trialrange &&
+                                             td1.soundinterval == td2.soundinterval &&
+                                             td1.cuetime == td2.cuetime &&
+                                             td1.odorinterval == td2.odorinterval &&
+                                             td1.odordirection == td2.odordirection &&
+                                             td1.lickonsets == td2.lickonsets
+
 function Base.show(io::IO, td::TrialData)
     println(io, "Trial over indices ", td.trialrange, ':')
     println(io, "  sound: ", td.soundinterval)

@@ -32,8 +32,14 @@ using Test
 
     # Construction from a matrix
     mat = [df.soundlick df.lickometer df.odortiming df.odordirection]
-    dfmat = session_frame(mat; soundlick=1, lickometer=2, odortiming=3, odordirection=4)
+    dfmat = session_frame(mat; fs, soundlick=1, lickometer=2, odortiming=3, odordirection=4)
     @test dfmat.df == df
+    print(io, dfmat)
+    str = String(take!(io))
+    @test endswith(str, "Recorded at 2.0f0 Hz")
+    @test dfmat.lickometer == df.lickometer
+    @test trialdatas(dfmat;  lohi_sound = (0.25, 0.75), soundduration=2s, fcarrierlick=1Hz, minlickduration=1s) ==
+          trialdatas(df; fs, lohi_sound = (0.25, 0.75), soundduration=2s, fcarrierlick=1Hz, minlickduration=1s)
 
     # lick detection
     td = OlfactoryTopographicBehavior.TrialData(1:0, 1s .. 2s, 1s, 1.5s .. 3.0s, -1, [0.8s])

@@ -1,7 +1,5 @@
 ## Utilities
 
-iv2r(iv, fs) = round(Int, minimum(iv)*fs) : round(Int, maximum(iv)*fs)
-
 islo(trace, idx, lohi) = trace[idx] < lohi[1]
 ishi(trace, idx, lohi) = trace[idx] > lohi[2]
 
