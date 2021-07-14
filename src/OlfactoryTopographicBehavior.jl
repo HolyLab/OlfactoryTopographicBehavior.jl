@@ -7,7 +7,7 @@ using Unitful: Hz, s, uconvert, Quantity
 using DSP
 using Statistics
 
-export TrialData, is_lick, session_frame, trialdatas
+export TrialData, collect_by_trialtype, is_lick, session_frame, trialdatas
 
 include("types.jl")
 include("utils.jl")

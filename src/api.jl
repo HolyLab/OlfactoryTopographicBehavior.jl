@@ -108,3 +108,22 @@ function is_lick(td::TrialData; deadline=4s)
     firstidx > lastindex(td.lickonsets) && return false
     return td.lickonsets[firstidx] - tstart < deadline
 end
+
+"""
+    collect_by_trialtype(ispos::Function, data, tds::AbstractVector{TrialData})
+
+Categorize `data` by trial type (true positive, true negative, false positive, false negative).
+`ispos(td)` should return `true` if this trial should be a positive (lick) response.
+"""
+function collect_by_trialtype(ispos, data, tds::AbstractVector{TrialData})
+    T = typeof(first(data))
+    out = Dict("TP" => T[], "TN" => T[], "FP" => T[], "FN" => T[])
+    for (val, td) in zip(data, tds)
+        isp, isl = ispos(td), is_lick(td)
+        key =  isp &  isl ? "TP" :
+               isp & !isl ? "FN" :
+              !isp &  isl ? "FP" : "TN"
+        push!(out[key], val)
+    end
+    return out
+end

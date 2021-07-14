@@ -42,7 +42,7 @@ using Test
           trialdatas(df; fs, lohi_sound = (0.25, 0.75), soundduration=2s, fcarrierlick=1Hz, minlickduration=1s)
 
     # lick detection
-    td = OlfactoryTopographicBehavior.TrialData(1:0, 1s .. 2s, 1s, 1.5s .. 3.0s, -1, [0.8s])
+    td = TrialData(1:0, 1s .. 2s, 1s, 1.5s .. 3.0s, -1, [0.8s])
     @test !is_lick(td)
     push!(td.lickonsets, 6s)
     @test !is_lick(td)
@@ -54,4 +54,16 @@ using Test
     empty!(td.lickonsets)
     push!(td.lickonsets, 0.8s, 1.2s)
     @test  is_lick(td)
+
+    # trial-type aggregation
+    tds = [TrialData(1:0, 1s .. 2s, 2.5s, 2s .. 3s, 1, [0.8s]),
+           TrialData(1:0, 1s .. 2s, 2.5s, 2s .. 3s, 1, [2.7s]),
+           TrialData(1:0, 1s .. 2s, 2.5s, 2s .. 3s, 2, [0.8s]),
+           TrialData(1:0, 1s .. 2s, 2.5s, 2s .. 3s, 2, [2.7s])
+    ]
+    agg = collect_by_trialtype(td->isodd(td.odordirection), [1,2,3,4], tds)
+    @test agg["TP"] == [2]
+    @test agg["TN"] == [3]
+    @test agg["FP"] == [4]
+    @test agg["FN"] == [1]
 end
