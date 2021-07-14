@@ -33,10 +33,10 @@ using Test
     # Construction from a matrix
     mat = [df.soundlick df.lickometer df.odortiming df.odordirection]
     dfmat = session_frame(mat; soundlick=1, lickometer=2, odortiming=3, odordirection=4)
-    @test dfmat == df
+    @test dfmat.df == df
 
     # lick detection
-    td = OlfactoryTopographicBehavior.TrialData(1:0, 1s .. 2s, 1.5s .. 3.0s, -1, [0.8s])
+    td = OlfactoryTopographicBehavior.TrialData(1:0, 1s .. 2s, 1s, 1.5s .. 3.0s, -1, [0.8s])
     @test !is_lick(td)
     push!(td.lickonsets, 6s)
     @test !is_lick(td)
