@@ -3,6 +3,8 @@ module OlfactoryTopographicBehavior
 using DataFrames
 using IntervalSets
 using Unitful: Hz, s, uconvert
+using DSP
+using Statistics
 
 export is_lick, session_frame, trialdatas
 
@@ -53,23 +55,27 @@ function session_frame(ai; odortiming=1, vaccuum=2, soundlick=3, camera=4, sniff
 end
 
 """
-    trialdatas(df::DataFrame; fs=1000Hz, soundduration=1s, trialoffset=-1s, trialduration=10s, lohi_sound=(1, 3), lohi_lick=(-0.2, -0.05), lohi_odor=(0.5, 3.0), tprecision=0.1)
+    trialdatas(df::DataFrame; fs=1000Hz, fcarrierlick=60Hz, soundduration=1s, trialoffset=-1s, trialduration=10s, minlickduration=0.005s, maxlickamp=0.1, lohi_sound=(1, 3), lohi_odor=(0.5, 3.0), tprecision=0.1)
 
 Collect data on all trials in `df`, which should be a DataFrame with colums "soundlick", "lickometer", "odortiming", and "odordirection".
 Each should be an analog signal with timing data.
 
 The keyword arguments allow you to set:
 - `fs`: the sampling frequency (affects conversion to physical units)
-- `soundduration`: the expected duration of the sound pulse. This is used to find trials
+- `fcarrierlick`: the frequency of the carrier signal for lick detection (grounding this signal indicates a lick)
+- `soundduration`: the expected duration of the sound pulse. This is used to find trials.
 - `tprecision`: fractional "slop" in timing permitted for identifying a sound pulse.
 - `trialoffset`: start of the trial relative to the sound pulse onset
 - `trialduration`: length of the trial
+- `minlickduration`: the minimum length of grounding the lick carrier signal to count as a lick
+- `maxlickamp`: maximum allowed deviation of carrier voltage during a lick (as a fraction of lick carrier stddev)
 - `lohi_sound`: voltage thresholds for sound lo and hi (a sound pulse starts when this goes hi)
-- `lohi_lick`: voltage thresholds for lick lo and hi (negative deflections correspond to licks)
 - `lohi_odor`: voltage threshold for odor timing (odor pulse starts when this goes hi)
 """
-function trialdatas(df::DataFrame; fs=1000Hz, soundduration=1s, trialoffset=-1s, trialduration=10s, lohi_sound=(1, 3), lohi_lick=(-0.2, -0.05), lohi_odor=(0.5, 3.0), tprecision=0.1)
+function trialdatas(df::DataFrame; fs=1000Hz, fcarrierlick=60Hz, soundduration=1s, trialoffset=-1s, trialduration=10s, minlickduration=0.005s, maxlickamp=0.1, lohi_sound=(1, 3), lohi_odor=(0.5, 3.0), tprecision=0.1, kwargs...)
     soundlick, lick, odortiming, dir = df.soundlick, df.lickometer, df.odortiming, df.odordirection
+    checkcarrier(lick, fs, fcarrierlick; kwargs...)
+    lickthresh = std(lick) * maxlickamp
     alltrs = TrialData[]
     i, n = 1, length(soundlick)
     i = advance_to_lo(soundlick, i, n, lohi_sound)
@@ -87,14 +93,8 @@ function trialdatas(df::DataFrame; fs=1000Hz, soundduration=1s, trialoffset=-1s,
             jodor = advance_to_lo(odortiming, iodor, last(tr), lohi_odor)
             oi = (iodor-first(tr))/fs .. (jodor-first(tr))/fs
             trs = TrialData(tr, si, oi, dir[i])
-            # Detect all licks in the trial
-            j = advance_to_hi(lick, tr, lohi_lick)   # lick signal is hi when not licking
-            while j < last(tr)
-                j = advance_to_lo(lick, j, last(tr), lohi_lick)
-                j >= last(tr) && break
-                push!(trs.lickonsets, (j - first(tr))/fs)
-                j = advance_to_hi(lick, j, last(tr), lohi_lick)
-            end
+            addlicks!(trs.lickonsets, view(lick, tr); fs, minlickduration, lickthresh)
+
             push!(alltrs, trs)
             i = last(tr)
         else
@@ -102,6 +102,25 @@ function trialdatas(df::DataFrame; fs=1000Hz, soundduration=1s, trialoffset=-1s,
         end
     end
     return alltrs
+end
+
+# Detect all licks in the trial. `lick` should be just the voltages recorded during a single trial.
+function addlicks!(out, lick; fs, minlickduration, lickthresh)
+    k = k1 = firstindex(lick)
+    while k < lastindex(lick)
+        k += 1
+        abs(lick[k]) < lickthresh || continue        # if we're not close to ground, don't look for a lick
+        kend = k
+        while kend < lastindex(lick)
+            kend += 1
+            abs(lick[kend]) < lickthresh || break    # keep looking forward until an above-threshold deviation from ground
+        end
+        if kend - k > fs*minlickduration
+            push!(out, (k - k1)/fs)                  # we stayed grounded for long enough, count it as a lick
+        end
+        k = kend
+    end
+    return out
 end
 
 """
@@ -133,5 +152,23 @@ advance_to(isval::Function, trace, startstop::AbstractUnitRange{Int}, lohi) =
 
 advance_to_lo(args...) = advance_to(islo, args...)
 advance_to_hi(args...) = advance_to(ishi, args...)
+
+function carrierfreq(lick, fs; twindow=4s, fwindow=2)
+    # Check for the lickometer carrier signal
+    sg = Periodograms.spectrogram(lick, nextpow(2, convert(Float64, twindow*fs)); fs=fs/(1Hz))
+    pwr = vec(sum(sg.power; dims=2))[begin+1:end]   # drop the zero-frequency bin
+    frq = sg.freq[begin+1:end]
+    idx = argmax(pwr)
+    pwrc = copy(pwr)
+    pwrc[max(idx-fwindow, begin):min(idx+fwindow, end)] .= 0
+    return frq[idx] * Hz, pwr[idx] / maximum(pwrc)
+end
+
+function checkcarrier(lick, fs, fcarrierlick=60Hz; frtol=0.05, powthresh=10)
+    fpeak, prat = carrierfreq(lick, fs)
+    abs(fpeak - fcarrierlick) < frtol * fcarrierlick || error("peak frequency $fpeak does not match expected $fcarrierlick")
+    prat > powthresh || error("power ratio $prat does not meet SNR requirements")
+    return nothing
+end
 
 end
