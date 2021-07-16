@@ -8,7 +8,7 @@ using DSP
 using Statistics
 using Requires
 
-export TrialData, collect_by_trialtype, is_lick, session_frame, trialdatas
+export TrialData, collect_by_trialtype, is_lick, session_frame, trialdatas, trialrange
 
 include("types.jl")
 include("utils.jl")
