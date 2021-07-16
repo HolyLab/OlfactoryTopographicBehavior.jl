@@ -68,6 +68,54 @@ using Test
     @test agg["FP"] == [4]
     @test agg["FN"] == [1]
 
+    # Trial-interval selection
+    licks = repeat(Bool[0, 1], 20)
+    @test trialrange(licks, 0.5) == firstindex(licks):lastindex(licks)
+    @test trialrange(licks, 0.85) != firstindex(licks):lastindex(licks)
+    @test trialrange(licks, 0.15) != firstindex(licks):lastindex(licks)
+    n = lastindex(licks)
+    push!(licks, false)
+    @test trialrange(licks, 0.5) == firstindex(licks):lastindex(licks)
+    append!(licks, fill(false, 40))
+    idx = trialrange(licks, 0.5)
+    @test first(idx) == firstindex(licks)
+    @test n <= last(idx)+1 < lastindex(licks)
+    # A fairly naturalistic pattern: an overabundance of licks early in the session,
+    # followed by near-ideal behavior, followed by underlicking due to satiation.
+    n1, n2, n3 = 50, 100, 50
+    licks = [repeat(Bool[0, 1, 1, 1], n1); repeat(Bool[0, 1], n2); repeat(Bool[0, 0, 0, 1], n3)]
+    idx = trialrange(licks, 0.5)
+    @test 4*n1 .+ (1:2*n2-1) ⊆ idx
+    @test first(idx) > firstindex(licks)
+    @test last(idx) < lastindex(licks)
+    n1, n2, n3 = 100, 100, 100
+    for pval in (0.05, 0.4)
+        nfail = 0
+        for _ = 1:100
+            empty!(licks)
+            for _ = 1:n1
+                push!(licks, rand() < 0.85)
+            end
+            for _ = 1:n2
+                push!(licks, rand() < 0.5)
+            end
+            for _ = 1:n3
+                push!(licks, rand() < 0.15)
+            end
+            idx = trialrange(licks, 0.5, pval)
+            nfail += !(n1+ceil(Int, 0.1*n2):n1+floor(Int, 0.9*n2) ⊆ idx)
+            nfail += first(idx) <= firstindex(licks)
+            nfail += last(idx)  >= lastindex(licks)
+            # @test n1+1:n1+n2 ⊆ idx
+            # @test first(idx) > firstindex(licks)
+            # @test last(idx)  < lastindex(licks)
+        end
+        @test 30*pval< nfail < 300*pval
+    end
+    licks = repeat(Bool[0, 1, 1, 1], 10)
+    @test trialrange(licks, 0.5) != firstindex(licks):lastindex(licks)
+    @test trialrange(licks, 0.75) == firstindex(licks):lastindex(licks)
+
     # Plotting
     dfplt = copy(df)
     dfplt.sniff = randn(size(dfplt, 1))

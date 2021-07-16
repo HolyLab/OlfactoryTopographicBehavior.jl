@@ -52,3 +52,8 @@ function slope(y)
     dydx[end] = y[end] - y[end-1]
     return dydx
 end
+
+function getindex_fraction(sortedlist, frac::Real)
+    n = round(Int, (length(sortedlist)-1)*frac)
+    return sortedlist[firstindex(sortedlist) + n]
+end

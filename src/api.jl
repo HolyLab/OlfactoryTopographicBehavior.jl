@@ -127,3 +127,78 @@ function collect_by_trialtype(ispos, data, tds::AbstractVector{TrialData})
     end
     return out
 end
+
+"""
+    rng = trialrange(ispos::AbstractVector{Bool}, fractionpositive=0.5, pval=0.01)
+
+Compute the largest range over which the probability of `true` values within `ispos` is consistent with `fractionpositive`.
+`pval` sets the p-value for determining inconsistency.
+"""
+function trialrange(ispos, fractionpositive=0.5, pval=0.05)
+    # It's not obvious that one can easily compute the distribution of consistent stretches,
+    # so do it by simulation. We cache simulation results to save computation time.
+    key = (ceil(Int, log2(length(ispos))), Float64(fractionpositive))
+    mindist, maxdist = get!(_trialdistribution, key) do
+        simulate_trialdist(key...)
+    end
+    minbounds = getindex_fraction.(mindist, pval/2)
+    maxbounds = getindex_fraction.(maxdist, 1-pval/2)
+    # Block out the bad stretches
+    cispos = cumsum(ispos)
+    isok = fill(true, eachindex(ispos))
+    n = length(ispos)
+    for k = 1:n-1
+        mnb, mxb = minbounds[k], maxbounds[k]
+        for start = 1:n-k
+            all(isok[start:start+k]) || continue
+            np = cispos[start+k] - cispos[start]
+            if !(mnb <= np <= mxb)
+                isok[start:start+k] .= false
+            end
+        end
+    end
+    # Find the longest contiguous stretch
+    startbest, stopbest = 1, 0
+    istart = firstindex(isok)
+    while istart < lastindex(isok)
+        if !isok[istart]
+            istart += 1
+            continue
+        end
+        iend = istart
+        while iend < lastindex(isok) && isok[iend+1]
+            iend += 1
+        end
+        if iend - istart > stopbest - startbest
+            startbest, stopbest = istart, iend
+        end
+        istart = iend+1
+    end
+    return startbest:stopbest
+end
+
+const VVI = Vector{Vector{Int}}
+const _trialdistribution = Dict{Tuple{Int,Float64},Tuple{VVI,VVI}}()  # cached simulation results
+
+function simulate_trialdist(log2n::Int, fractionpositive::Float64, nsim::Int=10^4)
+    n = 2^log2n
+    npmindists = [fill(n+1, nsim) for _ = 1:n-1]
+    npmaxdists = [fill( -1, nsim) for _ = 1:n-1]
+    for isim = 1:nsim
+        b = rand(n) .<= fractionpositive
+        cb = cumsum(b)
+        for k = 1:n-1
+            npmin, npmax = typemax(Int), typemin(Int)
+            @inbounds @simd for start = 1:n-k
+                np = cb[start+k] - cb[start]
+                npmin = min(npmin, np)
+                npmax = max(npmax, np)
+            end
+            npmindists[k][isim] = npmin
+            npmaxdists[k][isim] = npmax
+        end
+    end
+    foreach(sort!, npmindists)
+    foreach(sort!, npmaxdists)
+    return npmindists, npmaxdists
+end
