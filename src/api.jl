@@ -137,7 +137,7 @@ Compute the largest range over which the probability of `true` values within `is
 function trialrange(ispos, fractionpositive=0.5, pval=0.05)
     # It's not obvious that one can easily compute the distribution of consistent stretches,
     # so do it by simulation. We cache simulation results to save computation time.
-    key = (ceil(Int, log2(length(ispos))), fractionpositive)
+    key = (ceil(Int, log2(length(ispos))), Float64(fractionpositive))
     mindist, maxdist = get!(_trialdistribution, key) do
         simulate_trialdist(key...)
     end
@@ -202,7 +202,3 @@ function simulate_trialdist(log2n::Int, fractionpositive::Float64, nsim::Int=10^
     foreach(sort!, npmaxdists)
     return npmindists, npmaxdists
 end
-simulate_trialdist(n::Integer, fractionpositive::Real, nsim::Integer) =
-    simulate_trialdist(Int(n), Float64(fractionpositive), Int(nsim))
-simulate_trialdist(n::Integer, fractionpositive::Real) =
-    simulate_trialdist(Int(n), Float64(fractionpositive))
